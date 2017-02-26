@@ -2,27 +2,29 @@ library(curl)
 library(jsonlite)
 
 # authenticate
-access_token <- "YOUR_TOKEN"
+accessToken <- "YOUR_TOKEN"
+pageId <- "153080620724"
+numberOfPagesToScrape <- 5
 
-queryPosts = paste("https://graph.facebook.com/v2.8/153080620724/feed?fields=id%2Cmessage%2Ccreated_time%2Cmessage_tags%2Cshares%2Clink&limit=100&access_token=",access_token,sep="")
+query = paste("https://graph.facebook.com/v2.8/",pageId,"/feed?fields=id%2Cmessage%2Cplace%2Ccreated_time%2Cmessage_tags%2Cshares%2Clink&limit=100&access_token=",accessToken,sep="")
 
 #extract posts
-allposts <- data.frame()
-for (i in 1:5) {
-  fbPage <- curl_fetch_memory(queryPosts)
+posts <- data.frame()
+for (i in 1:numberOfPagesToScrape) {
+  fbPage <- curl_fetch_memory(query)
   postsJson <- fromJSON(rawToChar(fbPage$content),simplifyDataFrame=TRUE)
   postsDf <-  flatten(postsJson$data, recursive = TRUE)
-  allposts <<- rbind.data.frame(allposts,postsDf)
-  queryPosts = postsJson$paging$'next'
+  posts <<- rbind.data.frame(posts,postsDf)
+  query = postsJson$paging$'next'
 }
 
 #extract likes, shares, comments
-posts <- allposts$id
+postIds <- posts$id
 likes <- vector()
 shares <- vector()
 comments <- vector()
-for (post in posts) {
-  reactionURL <- paste("https://graph.facebook.com/v2.8/",post,"?fields=shares%2Clikes.limit(0).summary(true)%2Ccomments.limit(0).summary(true)&access_token=",access_token,sep="")
+for (post in postIds) {
+  reactionURL <- paste("https://graph.facebook.com/v2.8/",post,"?fields=shares%2Clikes.limit(0).summary(true)%2Ccomments.limit(0).summary(true)&access_token=",accessToken,sep="")
   reactions <- curl_fetch_memory(reactionURL)
   reactionsJson <- fromJSON(rawToChar(reactions$content),simplifyDataFrame=TRUE)
   likeCount <- reactionsJson$likes$summary$total_count
@@ -34,7 +36,9 @@ for (post in posts) {
 }
 
 #add likes, shares, comments to DF
-allposts$likes <- likes
-allposts$shares <- shares
-allposts$comments <- comments
+posts$likes <- likes
+posts$shares <- shares
+posts$comments <- comments
 
+#remove temp stuff
+rm(list= ls()[!(ls() %in% c('posts','accessToken','pageId','numberOfPagesToScrape'))])
